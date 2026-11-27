@@ -66,14 +66,16 @@ h3{font-size:16px;font-weight:650;margin:16px 0 8px}
 #world{background:var(--sea)}
 :root{--sea:color-mix(in srgb,#3B82C4 22%,var(--bg));--seaTxt:color-mix(in srgb,#7DB8E8 80%,var(--text));--border:color-mix(in srgb,var(--bg) 70%,#000)}
 html.light{--sea:#CFE6F6;--seaTxt:#3C7FB8;--border:rgba(255,255,255,.95)}
-#worldSvg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;--k:1}
+#worldSvg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;--k:1;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#worldSvg.moving .route{animation-play-state:paused}
+#worldSvg.moving .ctry{transition:none}
 #worldSvg .sea{fill:var(--sea)}
 .grat path{pointer-events:none;fill:none;stroke:color-mix(in srgb,var(--seaTxt) 22%,transparent);stroke-width:.6px;vector-effect:non-scaling-stroke}
 .grat path.eq{stroke-dasharray:4 4}
-.ctry{--mc:#E7D3A4;fill:color-mix(in srgb,var(--mc) 58%,var(--bg));stroke:var(--border);stroke-width:.7px;vector-effect:non-scaling-stroke;stroke-linejoin:round;cursor:pointer;transition:opacity .4s, fill .4s}
+.ctry{--mc:#E7D3A4;fill:color-mix(in srgb,var(--mc) 58%,var(--bg));stroke:var(--border);stroke-width:.7px;vector-effect:non-scaling-stroke;stroke-linejoin:round;cursor:pointer}
 html.light .ctry{fill:var(--mc)}
 .ctry.m1{--mc:#F2C48D}.ctry.m2{--mc:#B9DB9B}.ctry.m3{--mc:#F1A9B0}.ctry.m4{--mc:#A9C3EE}.ctry.m5{--mc:#F4DD84}.ctry.m6{--mc:#CDB4EA}.ctry.m7{--mc:#9ED9CF}.ctry.m8{--mc:#EDB996}.ctry.m9{--mc:#D3DB97}
-.ctry:hover{filter:brightness(1.08)}
+@media (hover:hover){.ctry:hover{filter:brightness(1.08)}}
 .ctry.dim{opacity:.35}
 .ctry.sel{stroke:var(--accent);stroke-width:2.2px;opacity:1}
 svg.power .ctry{fill:color-mix(in srgb,var(--text) 10%,var(--bg))}
@@ -251,5 +253,5 @@ textarea{width:100%;min-height:80px;resize:vertical}
 .empty{padding:40px;text-align:center;color:var(--muted)}
 
 svg.far .choke .spotTxt{display:none}
-body.sideOpen #worldTools{right:444px}
-#worldTools{transition:right .45s cubic-bezier(.2,.8,.2,1)}
+body.sideOpen #worldTools{transform:translateX(-420px)}
+#worldTools{transition:transform .45s cubic-bezier(.2,.8,.2,1)}

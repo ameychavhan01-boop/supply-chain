@@ -80,14 +80,16 @@ h3{font-size:16px;font-weight:650;margin:16px 0 8px}
 #world{background:var(--sea)}
 :root{--sea:color-mix(in srgb,#3B82C4 22%,var(--bg));--seaTxt:color-mix(in srgb,#7DB8E8 80%,var(--text));--border:color-mix(in srgb,var(--bg) 70%,#000)}
 html.light{--sea:#CFE6F6;--seaTxt:#3C7FB8;--border:rgba(255,255,255,.95)}
-#worldSvg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;--k:1}
+#worldSvg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;--k:1;transform-origin:0 0;will-change:transform;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+#worldSvg.moving .route{animation-play-state:paused}
+#worldSvg.moving .ctry{transition:none}
 #worldSvg .sea{fill:var(--sea)}
 .grat path{pointer-events:none;fill:none;stroke:color-mix(in srgb,var(--seaTxt) 22%,transparent);stroke-width:.6px;vector-effect:non-scaling-stroke}
 .grat path.eq{stroke-dasharray:4 4}
-.ctry{--mc:#E7D3A4;fill:color-mix(in srgb,var(--mc) 58%,var(--bg));stroke:var(--border);stroke-width:.7px;vector-effect:non-scaling-stroke;stroke-linejoin:round;cursor:pointer;transition:opacity .4s, fill .4s}
+.ctry{--mc:#E7D3A4;fill:color-mix(in srgb,var(--mc) 58%,var(--bg));stroke:var(--border);stroke-width:.7px;vector-effect:non-scaling-stroke;stroke-linejoin:round;cursor:pointer}
 html.light .ctry{fill:var(--mc)}
 .ctry.m1{--mc:#F2C48D}.ctry.m2{--mc:#B9DB9B}.ctry.m3{--mc:#F1A9B0}.ctry.m4{--mc:#A9C3EE}.ctry.m5{--mc:#F4DD84}.ctry.m6{--mc:#CDB4EA}.ctry.m7{--mc:#9ED9CF}.ctry.m8{--mc:#EDB996}.ctry.m9{--mc:#D3DB97}
-.ctry:hover{filter:brightness(1.08)}
+@media (hover:hover){.ctry:hover{filter:brightness(1.08)}}
 .ctry.dim{opacity:.35}
 .ctry.sel{stroke:var(--accent);stroke-width:2.2px;opacity:1}
 svg.power .ctry{fill:color-mix(in srgb,var(--text) 10%,var(--bg))}
@@ -265,8 +267,8 @@ textarea{width:100%;min-height:80px;resize:vertical}
 .empty{padding:40px;text-align:center;color:var(--muted)}
 
 svg.far .choke .spotTxt{display:none}
-body.sideOpen #worldTools{right:444px}
-#worldTools{transition:right .45s cubic-bezier(.2,.8,.2,1)}
+body.sideOpen #worldTools{transform:translateX(-420px)}
+#worldTools{transition:transform .45s cubic-bezier(.2,.8,.2,1)}
 </style>
 </head>
 <body>
@@ -1524,10 +1526,27 @@ var W = (function () {
     CAPL.forEach(function (c) { if (c.e.classList.contains("hd")) return; if (!tryPlace([c.x - 4 * K, c.y - 6 * K, c.x + c.wf * K, c.y + 6 * K])) c.e.classList.add("hd"); });
     SEAL.forEach(function (s) { var need = s.r === 0 ? 0 : s.r === 1 ? 2.9 : s.r === 2 ? 3.7 : 4.5; s.e.classList.toggle("hd", wz < need || (s.r === 0 && wz > 5.2)); });
   }
-  function setVB(v) {
-    if (v.w !== vb.w) lastBucket = lastBucket; vb = v; svg.setAttribute("viewBox", v.x + " " + v.y + " " + v.w + " " + v.h);
-    var px = svg.clientWidth || 1000; K = v.w / px; svg.style.setProperty("--k", K); placePts(); labelVis();
+  /* Smooth motion: while the map moves we slide/scale the already-drawn picture (fast, done by the GPU)
+     and only redraw it sharp when it gets too blurry, an edge shows, or the motion stops. */
+  var cvb = null, settleT = null, animId = 0, flying = false;
+  function commit() {
+    cvb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
+    svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h); svg.style.transform = "";
+    var px = svg.clientWidth || 1000; K = vb.w / px; svg.style.setProperty("--k", K); placePts(); labelVis();
   }
+  function settle() { clearTimeout(settleT); settleT = null; commit(); svg.classList.remove("moving"); }
+  function setVB(v, now) {
+    vb = v;
+    if (now || !cvb) return settle();
+    svg.classList.add("moving");
+    var sx = cvb.w / v.w, sy = cvb.h / v.h,
+        gx = Math.max(cvb.x - v.x, v.x + v.w - cvb.x - cvb.w) / v.w, gy = Math.max(cvb.y - v.y, v.y + v.h - cvb.y - cvb.h) / v.h;
+    var lim = flying ? 2.6 : 1.6, gap = flying ? 0.14 : 0.08;
+    if (sx > lim || sx < 0.7 || gx > gap || gy > gap) commit();
+    else svg.style.transform = "translate(" + ((cvb.x - v.x) / v.w * svg.clientWidth) + "px," + ((cvb.y - v.y) / v.h * svg.clientHeight) + "px) scale(" + sx + "," + sy + ")";
+    clearTimeout(settleT); settleT = setTimeout(settle, 140);
+  }
+  function box() { return svg.parentNode.getBoundingClientRect(); }
   drawRisks();
   function fitHome() {
     var W_ = svg.clientWidth || 1000, H_ = svg.clientHeight || 600, ar = W_ / H_;
@@ -1536,23 +1555,24 @@ var W = (function () {
     return home;
   }
   function animVB(to, ms, done) {
-    var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = performance.now();
+    var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = 0, my = ++animId; flying = true;
     function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
-    (function step(now) { var t = Math.min(1, (now - t0) / ms), e = ease(t);
+    requestAnimationFrame(function () { requestAnimationFrame(function (n) { t0 = n; step(n); }); });
+    function step(now) { if (my !== animId) return; var t = Math.min(1, (now - t0) / ms), e = ease(t);
       /* zoom in log space so it feels smooth */
       var lw = Math.exp(Math.log(from.w) + (Math.log(to.w) - Math.log(from.w)) * e), f = (from.w === to.w) ? e : (from.w - lw) / (from.w - to.w);
       setVB({ x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f, w: lw, h: lw * to.h / to.w });
-      if (t < 1) requestAnimationFrame(step); else if (done) done(); })(t0);
+      if (t < 1) requestAnimationFrame(step); else { flying = false; settle(); if (done) done(); } }
   }
-  function resize() { var h = fitHome(); lastBucket = null; if (!selected) setVB(h); else setVB(vb); }
+  function resize() { var h = fitHome(); lastBucket = null; if (!selected) setVB(h, true); else setVB(vb, true); }
   function clampW(w) { return Math.max(6, Math.min(MW * 1.6, w)); }
   /* --- pan & pinch --- */
   var pts = {}, drag = null, moved = false, downT = null;
-  function svgPt(cx, cy) { var r = svg.getBoundingClientRect(); return [vb.x + (cx - r.left) / r.width * vb.w, vb.y + (cy - r.top) / r.height * vb.h]; }
-  svg.addEventListener("pointerdown", function (e) { if (e.isPrimary) { pts = {}; downT = e.target; } try { svg.setPointerCapture(e.pointerId); } catch (x) {} pts[e.pointerId] = [e.clientX, e.clientY]; moved = false; drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; });
+  function svgPt(cx, cy) { var r = box(); return [vb.x + (cx - r.left) / r.width * vb.w, vb.y + (cy - r.top) / r.height * vb.h]; }
+  svg.addEventListener("pointerdown", function (e) { if (flying) { animId++; flying = false; } if (e.isPrimary) { pts = {}; downT = e.target; } try { svg.setPointerCapture(e.pointerId); } catch (x) {} pts[e.pointerId] = [e.clientX, e.clientY]; moved = false; drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; });
   svg.addEventListener("pointermove", function (e) {
     if (!pts[e.pointerId] || !drag) return; pts[e.pointerId] = [e.clientX, e.clientY];
-    var ids = Object.keys(pts), r = svg.getBoundingClientRect();
+    var ids = Object.keys(pts), r = box();
     if (ids.length === 1) {
       var s = drag.p[ids[0]]; if (!s) return; var dx = e.clientX - s[0], dy = e.clientY - s[1]; if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
       if (moved) setVB({ x: drag.vb.x - dx / r.width * drag.vb.w, y: drag.vb.y - dy / r.height * drag.vb.h, w: drag.vb.w, h: drag.vb.h });
@@ -1567,7 +1587,7 @@ var W = (function () {
   });
   function up(e) {
     delete pts[e.pointerId]; if (Object.keys(pts).length) { drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; return; }
-    drag = null; if (moved) return;
+    drag = null; if (moved) { if (settleT) settle(); return; }
     var t = downT || e.target;
     var risk = t.closest && t.closest("[data-risk]"); if (risk) return openRisk(risk.dataset.risk);
     var spot = t.closest && t.closest("[data-spot]"); if (spot && !riskMode) return openSpot(spot.dataset.spot);
@@ -1581,9 +1601,9 @@ var W = (function () {
   function zoomBy(k) { var cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2, w = clampW(vb.w / k), h = w * vb.h / vb.w; animVB({ x: cx - w / 2, y: cy - h / 2, w: w, h: h }, 350); }
 
   function clearSel() { $$(".ctry", gC).forEach(function (p) { p.classList.remove("dim", "sel"); }); gDep.innerHTML = ""; gR.style.opacity = showRoutes ? 1 : 0; selected = null; }
-  function goHome() { clearSel(); closeSide(); animVB(fitHome(), 900); }
+  function goHome() { closeSide(); animVB(fitHome(), 900); clearSel(); }
   function focusBox(b, cb) {
-    var r = svg.getBoundingClientRect(), panelW = Math.min(420, r.width * 0.92), visW = Math.max(200, r.width - panelW - 40), ar = r.width / r.height;
+    var r = box(), panelW = Math.min(420, r.width * 0.92), visW = Math.max(200, r.width - panelW - 40), ar = r.width / r.height;
     var bw = (b[2] - b[0]) * 1.5, bh = (b[3] - b[1]) * 1.5; bw = Math.max(bw, 14); bh = Math.max(bh, 10);
     var w = Math.max(bw * r.width / visW, bh * ar), h = w / ar;
     var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2, upp = w / r.width, centerPx = (r.width - panelW) / 2;
@@ -1592,9 +1612,9 @@ var W = (function () {
   function zoomCountry(cc) {
     var c = WC[cc]; if (!c) return;
     tapSound(); selected = cc;
-    $$(".ctry", gC).forEach(function (p) { p.classList.toggle("dim", p.dataset.cc !== cc); p.classList.toggle("sel", p.dataset.cc === cc); });
+    $$(".ctry", gC).forEach(function (p) { p.classList.toggle("sel", p.dataset.cc === cc); if (p.dataset.cc === cc) p.classList.toggle("dim", false); });
     gR.style.opacity = 0.12; gDep.innerHTML = "";
-    focusBox(c.zb || c.bb, function () { drawDeps(cc); });
+    focusBox(c.zb || c.bb, function () { if (selected !== cc) return; $$(".ctry", gC).forEach(function (p) { p.classList.toggle("dim", p.dataset.cc !== cc); }); drawDeps(cc); });
     countryPanel(cc);
   }
   function drawDeps(cc) {

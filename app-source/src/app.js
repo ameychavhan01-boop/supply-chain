@@ -278,10 +278,27 @@ var W = (function () {
     CAPL.forEach(function (c) { if (c.e.classList.contains("hd")) return; if (!tryPlace([c.x - 4 * K, c.y - 6 * K, c.x + c.wf * K, c.y + 6 * K])) c.e.classList.add("hd"); });
     SEAL.forEach(function (s) { var need = s.r === 0 ? 0 : s.r === 1 ? 2.9 : s.r === 2 ? 3.7 : 4.5; s.e.classList.toggle("hd", wz < need || (s.r === 0 && wz > 5.2)); });
   }
-  function setVB(v) {
-    if (v.w !== vb.w) lastBucket = lastBucket; vb = v; svg.setAttribute("viewBox", v.x + " " + v.y + " " + v.w + " " + v.h);
-    var px = svg.clientWidth || 1000; K = v.w / px; svg.style.setProperty("--k", K); placePts(); labelVis();
+  /* Smooth motion: while the map moves we slide/scale the already-drawn picture (fast, done by the GPU)
+     and only redraw it sharp when it gets too blurry, an edge shows, or the motion stops. */
+  var cvb = null, settleT = null, animId = 0, flying = false;
+  function commit() {
+    cvb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
+    svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h); svg.style.transform = "";
+    var px = svg.clientWidth || 1000; K = vb.w / px; svg.style.setProperty("--k", K); placePts(); labelVis();
   }
+  function settle() { clearTimeout(settleT); settleT = null; commit(); svg.classList.remove("moving"); }
+  function setVB(v, now) {
+    vb = v;
+    if (now || !cvb) return settle();
+    svg.classList.add("moving");
+    var sx = cvb.w / v.w, sy = cvb.h / v.h,
+        gx = Math.max(cvb.x - v.x, v.x + v.w - cvb.x - cvb.w) / v.w, gy = Math.max(cvb.y - v.y, v.y + v.h - cvb.y - cvb.h) / v.h;
+    var lim = flying ? 2.6 : 1.6, gap = flying ? 0.14 : 0.08;
+    if (sx > lim || sx < 0.7 || gx > gap || gy > gap) commit();
+    else svg.style.transform = "translate(" + ((cvb.x - v.x) / v.w * svg.clientWidth) + "px," + ((cvb.y - v.y) / v.h * svg.clientHeight) + "px) scale(" + sx + "," + sy + ")";
+    clearTimeout(settleT); settleT = setTimeout(settle, 140);
+  }
+  function box() { return svg.parentNode.getBoundingClientRect(); }
   drawRisks();
   function fitHome() {
     var W_ = svg.clientWidth || 1000, H_ = svg.clientHeight || 600, ar = W_ / H_;
@@ -290,23 +307,24 @@ var W = (function () {
     return home;
   }
   function animVB(to, ms, done) {
-    var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = performance.now();
+    var from = { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, t0 = 0, my = ++animId; flying = true;
     function ease(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
-    (function step(now) { var t = Math.min(1, (now - t0) / ms), e = ease(t);
+    requestAnimationFrame(function () { requestAnimationFrame(function (n) { t0 = n; step(n); }); });
+    function step(now) { if (my !== animId) return; var t = Math.min(1, (now - t0) / ms), e = ease(t);
       /* zoom in log space so it feels smooth */
       var lw = Math.exp(Math.log(from.w) + (Math.log(to.w) - Math.log(from.w)) * e), f = (from.w === to.w) ? e : (from.w - lw) / (from.w - to.w);
       setVB({ x: from.x + (to.x - from.x) * f, y: from.y + (to.y - from.y) * f, w: lw, h: lw * to.h / to.w });
-      if (t < 1) requestAnimationFrame(step); else if (done) done(); })(t0);
+      if (t < 1) requestAnimationFrame(step); else { flying = false; settle(); if (done) done(); } }
   }
-  function resize() { var h = fitHome(); lastBucket = null; if (!selected) setVB(h); else setVB(vb); }
+  function resize() { var h = fitHome(); lastBucket = null; if (!selected) setVB(h, true); else setVB(vb, true); }
   function clampW(w) { return Math.max(6, Math.min(MW * 1.6, w)); }
   /* --- pan & pinch --- */
   var pts = {}, drag = null, moved = false, downT = null;
-  function svgPt(cx, cy) { var r = svg.getBoundingClientRect(); return [vb.x + (cx - r.left) / r.width * vb.w, vb.y + (cy - r.top) / r.height * vb.h]; }
-  svg.addEventListener("pointerdown", function (e) { if (e.isPrimary) { pts = {}; downT = e.target; } try { svg.setPointerCapture(e.pointerId); } catch (x) {} pts[e.pointerId] = [e.clientX, e.clientY]; moved = false; drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; });
+  function svgPt(cx, cy) { var r = box(); return [vb.x + (cx - r.left) / r.width * vb.w, vb.y + (cy - r.top) / r.height * vb.h]; }
+  svg.addEventListener("pointerdown", function (e) { if (flying) { animId++; flying = false; } if (e.isPrimary) { pts = {}; downT = e.target; } try { svg.setPointerCapture(e.pointerId); } catch (x) {} pts[e.pointerId] = [e.clientX, e.clientY]; moved = false; drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; });
   svg.addEventListener("pointermove", function (e) {
     if (!pts[e.pointerId] || !drag) return; pts[e.pointerId] = [e.clientX, e.clientY];
-    var ids = Object.keys(pts), r = svg.getBoundingClientRect();
+    var ids = Object.keys(pts), r = box();
     if (ids.length === 1) {
       var s = drag.p[ids[0]]; if (!s) return; var dx = e.clientX - s[0], dy = e.clientY - s[1]; if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
       if (moved) setVB({ x: drag.vb.x - dx / r.width * drag.vb.w, y: drag.vb.y - dy / r.height * drag.vb.h, w: drag.vb.w, h: drag.vb.h });
@@ -321,7 +339,7 @@ var W = (function () {
   });
   function up(e) {
     delete pts[e.pointerId]; if (Object.keys(pts).length) { drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; return; }
-    drag = null; if (moved) return;
+    drag = null; if (moved) { if (settleT) settle(); return; }
     var t = downT || e.target;
     var risk = t.closest && t.closest("[data-risk]"); if (risk) return openRisk(risk.dataset.risk);
     var spot = t.closest && t.closest("[data-spot]"); if (spot && !riskMode) return openSpot(spot.dataset.spot);
@@ -335,9 +353,9 @@ var W = (function () {
   function zoomBy(k) { var cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2, w = clampW(vb.w / k), h = w * vb.h / vb.w; animVB({ x: cx - w / 2, y: cy - h / 2, w: w, h: h }, 350); }
 
   function clearSel() { $$(".ctry", gC).forEach(function (p) { p.classList.remove("dim", "sel"); }); gDep.innerHTML = ""; gR.style.opacity = showRoutes ? 1 : 0; selected = null; }
-  function goHome() { clearSel(); closeSide(); animVB(fitHome(), 900); }
+  function goHome() { closeSide(); animVB(fitHome(), 900); clearSel(); }
   function focusBox(b, cb) {
-    var r = svg.getBoundingClientRect(), panelW = Math.min(420, r.width * 0.92), visW = Math.max(200, r.width - panelW - 40), ar = r.width / r.height;
+    var r = box(), panelW = Math.min(420, r.width * 0.92), visW = Math.max(200, r.width - panelW - 40), ar = r.width / r.height;
     var bw = (b[2] - b[0]) * 1.5, bh = (b[3] - b[1]) * 1.5; bw = Math.max(bw, 14); bh = Math.max(bh, 10);
     var w = Math.max(bw * r.width / visW, bh * ar), h = w / ar;
     var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2, upp = w / r.width, centerPx = (r.width - panelW) / 2;
@@ -346,9 +364,9 @@ var W = (function () {
   function zoomCountry(cc) {
     var c = WC[cc]; if (!c) return;
     tapSound(); selected = cc;
-    $$(".ctry", gC).forEach(function (p) { p.classList.toggle("dim", p.dataset.cc !== cc); p.classList.toggle("sel", p.dataset.cc === cc); });
+    $$(".ctry", gC).forEach(function (p) { p.classList.toggle("sel", p.dataset.cc === cc); if (p.dataset.cc === cc) p.classList.toggle("dim", false); });
     gR.style.opacity = 0.12; gDep.innerHTML = "";
-    focusBox(c.zb || c.bb, function () { drawDeps(cc); });
+    focusBox(c.zb || c.bb, function () { if (selected !== cc) return; $$(".ctry", gC).forEach(function (p) { p.classList.toggle("dim", p.dataset.cc !== cc); }); drawDeps(cc); });
     countryPanel(cc);
   }
   function drawDeps(cc) {
