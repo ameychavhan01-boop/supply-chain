@@ -247,7 +247,7 @@ window.SC_CHAINS = {
       { id: "infineon", lv: "fab", n: "Infineon", c: "DE", l: true, x: "XETRA: IFX", r: "fab",
         d: "Germany's biggest chipmaker — power chips and car chips.",
         w: "Cars and EVs need its power chips; shortages hit car output.",
-        rev: RV("~€15B", "FY2024"), mc: "Large", cu: "Bosch, Tesla, VW, Toyota", su: "Wafers, TSMC (some)", needs: ["siltronic", "amat", "tsmc"], alt: ["st", "nxp"] },
+        rev: RV("~€15B", "FY2024"), mc: "Large", cu: "Bosch, Tesla, VW, Toyota", su: "Wafers, TSMC (some)", needs: ["siltronic", "amat", "tsmc"], alt: ["nxp"] },
       { id: "nxp", lv: "fab", n: "NXP Semiconductors", c: "NL", l: true, x: "NASDAQ: NXPI", r: "fab",
         d: "Dutch car-chip leader (microcontrollers, radar, car networks).",
         w: "VW turned to NXP as a supplier after the Nexperia crisis.",
