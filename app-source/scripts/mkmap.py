@@ -61,7 +61,7 @@ for f in feats:
     g = f["geometry"]; polys = g["coordinates"] if g["type"] == "MultiPolygon" else [g["coordinates"]]
     is_ind = p["ADM0_A3"] == "IND"
     amin = 0.0004 if is_ind else 0.004
-    paths = []; xs = []; ys = []
+    paths = []; xs = []; ys = []; lo = []
     big = max(area(poly[0]) for poly in polys)
     bigp = [poly for poly in polys if area(poly[0]) == big][0][0]
     bx = [pr(x, y) for x, y in bigp]; bcx = sum(q[0] for q in bx) / len(bx); bcy = sum(q[1] for q in bx) / len(bx)
@@ -72,6 +72,9 @@ for f in feats:
         A = area(outer)
         if A < amin and A < big * 0.5: continue
         t = TOL * (0.4 if A < 0.5 else 1.0)
+        if A >= (0.01 if is_ind else 0.08) or A == big:
+            sl = dp(outer, 0.16 if A > 2 else 0.06)
+            if len(sl) >= 4: lo.append(ring_path(sl.tolist()))
         for k, ring in enumerate(poly):
             if k > 0 and area(ring) < 0.05: continue
             s = dp(ring, t)
@@ -88,7 +91,7 @@ for f in feats:
                     for X, Y in pq: zx.append(X); zy.append(Y)
     if not paths: continue
     lx, ly = pr(p["LABEL_X"], p["LABEL_Y"])
-    countries.append({"a2": a2, "a3": p["ADM0_A3"], "n": p["NAME"], "d": "".join(paths),
+    countries.append({"a2": a2, "a3": p["ADM0_A3"], "n": p["NAME"], "d": "".join(paths), "dl": "".join(lo) or "".join(paths),
         "lx": round(lx, 1), "ly": round(ly, 1), "lr": p.get("LABELRANK", 5), "ml": p.get("MIN_LABEL", 5),
         "mc": p.get("MAPCOLOR9", 1), "bb": [round(min(xs),1), round(min(ys),1), round(max(xs),1), round(max(ys),1)],
         "zb": [round(min(zx),1), round(min(zy),1), round(max(zx),1), round(max(zy),1)], "ar": round(big, 2),

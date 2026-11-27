@@ -206,10 +206,11 @@ var W = (function () {
   for (var lo = -150; lo <= 150; lo += 30) { var a = pr(lo, 84), b = pr(lo, -58); el("path", { d: "M" + a[0] + " " + a[1] + "V" + b[1] }, gGrat); }
   [-30, 0, 30, 60].forEach(function (la) { var y = pr(0, la)[1]; el("path", { d: "M0 " + y + "H" + MW, "class": la === 0 ? "eq" : "" }, gGrat); });
 
-  /* countries */
+  /* countries (low detail when far, full detail when zoomed in) */
+  var PATHS = [], hiDetail = false;
   WD.countries.forEach(function (c) {
     var cls = "ctry m" + (c.mc || 1) + (GDPR[c.a2] ? " top" : "") + (CO[c.a2] ? " pw-" + CO[c.a2].cat : "");
-    el("path", { d: c.d, "class": cls, "data-cc": c.a2 }, gC);
+    PATHS.push({ e: el("path", { d: c.dl || c.d, "class": cls, "data-cc": c.a2 }, gC), c: c });
   });
   /* labels */
   var LBL = [];
@@ -268,6 +269,7 @@ var W = (function () {
   function labelVis() {
     var wz = Math.log(MW / vb.w) / Math.LN2 + 2.3, bucket = Math.round(wz * 4);
     if (bucket === lastBucket) return; lastBucket = bucket;
+    hiDetail = wz >= 3.2;
     LBL.forEach(function (l) { l.e.classList.toggle("hd", l.ml > wz + 0.35); });
     var capOn = wz >= 3.9; CAPL.forEach(function (c) { c.e.classList.toggle("hd", !capOn || c.ml > wz + 0.2); });
     svg.classList.toggle("far", wz < 3.1);
@@ -278,15 +280,23 @@ var W = (function () {
     CAPL.forEach(function (c) { if (c.e.classList.contains("hd")) return; if (!tryPlace([c.x - 4 * K, c.y - 6 * K, c.x + c.wf * K, c.y + 6 * K])) c.e.classList.add("hd"); });
     SEAL.forEach(function (s) { var need = s.r === 0 ? 0 : s.r === 1 ? 2.9 : s.r === 2 ? 3.7 : 4.5; s.e.classList.toggle("hd", wz < need || (s.r === 0 && wz > 5.2)); });
   }
+  /* fast: while moving only the viewBox changes; sizes/labels settle when movement stops */
   /* Smooth motion: while the map moves we slide/scale the already-drawn picture (fast, done by the GPU)
-     and only redraw it sharp when it gets too blurry, an edge shows, or the motion stops. */
-  var cvb = null, settleT = null, animId = 0, flying = false;
+     and only redraw it when it gets too blurry or an edge shows. Full detail + labels settle when motion stops. */
+  var settleT = null, rafP = null, pendV = null, cvb = null, animId = 0, flying = false;
   function commit() {
     cvb = { x: vb.x, y: vb.y, w: vb.w, h: vb.h };
     svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h); svg.style.transform = "";
     var px = svg.clientWidth || 1000; K = vb.w / px; svg.style.setProperty("--k", K); placePts(); labelVis();
   }
-  function settle() { clearTimeout(settleT); settleT = null; commit(); svg.classList.remove("moving"); }
+  function settle() { clearTimeout(settleT); settleT = null; commit(); detail(); svg.classList.remove("moving"); }
+  function box() { return svg.parentNode.getBoundingClientRect(); }
+  /* full-detail borders only for countries on screen; the rest stay light */
+  function detail() {
+    var mx = vb.w * 0.5, my = vb.h * 0.5, x0 = vb.x - mx, x1 = vb.x + vb.w + mx, y0 = vb.y - my, y1 = vb.y + vb.h + my;
+    PATHS.forEach(function (p) { var b = p.c.bb, hi = hiDetail && b[0] < x1 && b[2] > x0 && b[1] < y1 && b[3] > y0, off = b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1;
+      var st = hi ? 2 : 1; if (p.st !== st) { p.st = st; p.e.setAttribute("d", hi ? p.c.d : (p.c.dl || p.c.d)); } });
+  }
   function setVB(v, now) {
     vb = v;
     if (now || !cvb) return settle();
@@ -296,9 +306,9 @@ var W = (function () {
     var lim = flying ? 2.6 : 1.6, gap = flying ? 0.14 : 0.08;
     if (sx > lim || sx < 0.7 || gx > gap || gy > gap) commit();
     else svg.style.transform = "translate(" + ((cvb.x - v.x) / v.w * svg.clientWidth) + "px," + ((cvb.y - v.y) / v.h * svg.clientHeight) + "px) scale(" + sx + "," + sy + ")";
-    clearTimeout(settleT); settleT = setTimeout(settle, 140);
+    clearTimeout(settleT); settleT = setTimeout(settle, 120);
   }
-  function box() { return svg.parentNode.getBoundingClientRect(); }
+  function setVBraf(v) { pendV = v; if (rafP) return; rafP = requestAnimationFrame(function () { rafP = null; if (pendV) setVB(pendV); }); }
   drawRisks();
   function fitHome() {
     var W_ = svg.clientWidth || 1000, H_ = svg.clientHeight || 600, ar = W_ / H_;
@@ -327,19 +337,19 @@ var W = (function () {
     var ids = Object.keys(pts), r = box();
     if (ids.length === 1) {
       var s = drag.p[ids[0]]; if (!s) return; var dx = e.clientX - s[0], dy = e.clientY - s[1]; if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
-      if (moved) setVB({ x: drag.vb.x - dx / r.width * drag.vb.w, y: drag.vb.y - dy / r.height * drag.vb.h, w: drag.vb.w, h: drag.vb.h });
+      if (moved) setVBraf({ x: drag.vb.x - dx / r.width * drag.vb.w, y: drag.vb.y - dy / r.height * drag.vb.h, w: drag.vb.w, h: drag.vb.h });
     } else if (ids.length >= 2) {
       moved = true; var a0 = drag.p[ids[0]], b0 = drag.p[ids[1]], a1 = pts[ids[0]], b1 = pts[ids[1]]; if (!a0 || !b0) return;
       var d0 = Math.hypot(a0[0] - b0[0], a0[1] - b0[1]), d1 = Math.hypot(a1[0] - b1[0], a1[1] - b1[1]); var k = d0 / Math.max(1, d1);
       var m0x = (a0[0] + b0[0]) / 2, m0y = (a0[1] + b0[1]) / 2, m1x = (a1[0] + b1[0]) / 2, m1y = (a1[1] + b1[1]) / 2;
       var w = clampW(drag.vb.w * k), h = w * drag.vb.h / drag.vb.w;
       var fx = drag.vb.x + (m0x - r.left) / r.width * drag.vb.w, fy = drag.vb.y + (m0y - r.top) / r.height * drag.vb.h;
-      setVB({ x: fx - (m1x - r.left) / r.width * w, y: fy - (m1y - r.top) / r.height * h, w: w, h: h });
+      setVBraf({ x: fx - (m1x - r.left) / r.width * w, y: fy - (m1y - r.top) / r.height * h, w: w, h: h });
     }
   });
   function up(e) {
     delete pts[e.pointerId]; if (Object.keys(pts).length) { drag = { vb: { x: vb.x, y: vb.y, w: vb.w, h: vb.h }, p: Object.assign({}, pts) }; return; }
-    drag = null; if (moved) { if (settleT) settle(); return; }
+    drag = null; if (moved) { if (rafP) { cancelAnimationFrame(rafP); rafP = null; if (pendV) setVB(pendV); } if (settleT) settle(); return; }
     var t = downT || e.target;
     var risk = t.closest && t.closest("[data-risk]"); if (risk) return openRisk(risk.dataset.risk);
     var spot = t.closest && t.closest("[data-spot]"); if (spot && !riskMode) return openSpot(spot.dataset.spot);
