@@ -1574,6 +1574,7 @@ var W = (function () {
     var cc = t.getAttribute && t.getAttribute("data-cc");
     if (riskMode) { var q = svgPt(e.clientX, e.clientY), ll = inv(q[0], q[1]); return addRisk(ll[0], ll[1]); }
     if (cc) return zoomCountry(cc);
+    if (side.classList.contains("open")) { clearSel(); closeSide(); }
   }
   svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", function (e) { delete pts[e.pointerId]; drag = null; });
   svg.addEventListener("wheel", function (e) { e.preventDefault(); var k = e.deltaY > 0 ? 1.12 : 0.89, q = svgPt(e.clientX, e.clientY); var w = clampW(vb.w * k), h = w * vb.h / vb.w; setVB({ x: q[0] - (q[0] - vb.x) * w / vb.w, y: q[1] - (q[1] - vb.y) * h / vb.h, w: w, h: h }); }, { passive: false });
