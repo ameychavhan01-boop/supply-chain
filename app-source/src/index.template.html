@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Supply Chain">
+<meta name="theme-color" content="#0B1020">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<link rel="manifest" href="manifest.json">
+<title>Supply Chain</title>
+<style>/*CSS*/</style>
+</head>
+<body>
+<div id="top">
+  <div id="leftTop"></div>
+  <div id="logo"><b>JSR</b>ENTERPRISES</div>
+  <div id="searchWrap"><input id="search" type="search" autocomplete="off" placeholder="Search company, product, country"><div id="results" class="hide"></div></div>
+</div>
+
+<section id="world" class="screen">
+  <svg id="worldSvg" preserveAspectRatio="xMidYMid meet"></svg>
+  <div id="fact" class="card"></div>
+  <div id="legend" class="card"></div>
+  <div id="worldTools"></div>
+  <div id="riskHint" class="hide">Tap the map to mark a risk spot</div>
+</section>
+
+<section id="chains" class="screen hide"><div class="scroll" id="chainsList"></div></section>
+
+<section id="chainView" class="screen hide">
+  <div id="chainBar"></div>
+  <div id="canvasWrap"><svg id="chainSvg"><g id="scene"></g></svg></div>
+  <div id="mini"></div>
+  <div id="roleLegend" class="card"></div>
+  <div id="zoomBtns"></div>
+  <div id="wiBanner" class="hide"></div>
+</section>
+
+<section id="saved" class="screen hide"><div class="scroll" id="savedBody"></div></section>
+<section id="settings" class="screen hide"><div class="scroll" id="settingsBody"></div></section>
+
+<aside id="side" class="side"><div class="hd"></div><div class="bd"></div></aside>
+<nav id="tabs"></nav>
+<div id="veil"></div>
+<div id="modal" class="modal"><div class="hd"><h2></h2><button class="iconbtn" id="mClose"></button></div><div class="bd"></div></div>
+<div id="banner" class="hide"></div>
+<div id="toast"></div>
+
+<script>/*DATA*/</script>
+<script>/*GEO*/</script>
+<script>/*APP*/</script>
+</body>
+</html>
